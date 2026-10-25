@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -35,6 +36,7 @@ import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
@@ -43,6 +45,7 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -60,6 +63,7 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -68,16 +72,20 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.atvremote.common.Command
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -97,7 +105,7 @@ class MainActivity : ComponentActivity() {
                             UiState.Connecting -> Progress("Conectando…")
                             is UiState.ChooseTv -> ChooseScreen(s.tvs, vm::connect)
                             is UiState.EnterPin -> PinScreen(s, vm::submitPin, vm::cancelPairing)
-                            is UiState.Paired -> RemoteScreen(s.tvName, vm::press, vm::unpair)
+                            is UiState.Paired -> RemoteScreen(s.tvName, vm::press, vm::sendText, vm::unpair)
                         }
                     }
                 }
@@ -195,10 +203,14 @@ private fun PinScreen(state: UiState.EnterPin, onSubmit: (String) -> Unit, onCan
 }
 
 @Composable
-private fun RemoteScreen(tvName: String, press: (Int) -> Unit, onUnpair: () -> Unit) {
+private fun RemoteScreen(tvName: String, press: (Int) -> Unit, sendText: (String) -> Unit, onUnpair: () -> Unit) {
+    var typing by remember { mutableStateOf(false) }
+    if (typing) TextDialog(onSend = { typing = false; sendText(it) }, onDismiss = { typing = false })
+
     Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(tvName, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+            IconButton(onClick = { typing = true }) { Icon(Icons.Default.Keyboard, "Enviar texto") }
             var menu by remember { mutableStateOf(false) }
             Box {
                 IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "Mais") }
@@ -233,6 +245,32 @@ private fun RemoteScreen(tvName: String, press: (Int) -> Unit, onUnpair: () -> U
         }
         Spacer(Modifier.weight(1f))
     }
+}
+
+/** Text typed with the phone keyboard; the TV inserts it into the focused field, or drops it if there is none. */
+@Composable
+private fun TextDialog(onSend: (String) -> Unit, onDismiss: () -> Unit) {
+    var text by remember { mutableStateOf("") }
+    val focus = remember { FocusRequester() }
+    val send = { if (text.isNotEmpty()) onSend(text) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Enviar texto") },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { v -> if (v.toByteArray().size <= Command.MAX_TEXT_BYTES) text = v },
+                placeholder = { Text("Digite aqui") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                keyboardActions = KeyboardActions(onSend = { send() }),
+                modifier = Modifier.fillMaxWidth().focusRequester(focus),
+            )
+        },
+        confirmButton = { TextButton(onClick = send, enabled = text.isNotEmpty()) { Text("Enviar") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } },
+    )
+    LaunchedEffect(Unit) { focus.requestFocus() }
 }
 
 @Composable

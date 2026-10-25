@@ -109,11 +109,19 @@ class CommandSender(private val store: PhoneStore) : Closeable {
     private val executor = Executors.newSingleThreadExecutor()
     private val socket by lazy { DatagramSocket() }
 
-    fun send(keyCode: Int, action: Int = Command.PRESS) = executor.execute {
+    fun send(keyCode: Int, action: Int = Command.PRESS) = send { tv -> Command.key(tv.deviceId, tv.key, store.nextCounter(), keyCode, action) }
+
+    fun sendText(text: String) = send { tv -> Command.text(tv.deviceId, tv.key, store.nextCounter(), text) }
+
+    private fun send(encode: (PairedTv) -> ByteArray) = executor.execute {
         val tv = store.tv ?: return@execute
         runCatching {
-            val packet = Command.encode(tv.deviceId, tv.key, store.nextCounter(), keyCode, action)
-            socket.send(DatagramPacket(packet, packet.size, InetAddress.getByName(tv.host), Ports.COMMAND))
+            val packet = encode(tv)
+            val datagram = DatagramPacket(packet, packet.size, InetAddress.getByName(tv.host), Ports.COMMAND)
+            // Wi-Fi drops a few percent of UDP packets; the TV ignores the copy since it has the same counter.
+            socket.send(datagram)
+            Thread.sleep(15)
+            socket.send(datagram)
         }
     }
 

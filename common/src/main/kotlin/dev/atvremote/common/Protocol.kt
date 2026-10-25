@@ -100,7 +100,9 @@ object Pairing {
 }
 
 /**
- * Command datagram (55 bytes): device id (16, also the AAD) || nonce (12) || AES-GCM(counter u64, keycode u16, action u8) || tag (16).
+ * Command datagram: device id (16, also the AAD) || nonce (12) || AES-GCM(counter u64, type u8, payload) || tag (16).
+ *  - key:  payload = keycode u16, action u8 (56 bytes in total)
+ *  - text: payload = UTF-8 text, up to [MAX_TEXT_BYTES]
  * The counter must always grow, so captured packets can't be replayed.
  */
 object Command {
@@ -108,23 +110,45 @@ object Command {
     const val DOWN = 1
     const val UP = 2
 
-    private const val PLAIN_SIZE = 8 + 2 + 1
-    const val PACKET_SIZE = Ids.SIZE + Crypto.NONCE_SIZE + PLAIN_SIZE + Crypto.TAG_SIZE
+    const val MAX_TEXT_BYTES = 1000
 
-    class Decoded(val counter: Long, val keyCode: Int, val action: Int)
+    private const val TYPE_KEY = 1
+    private const val TYPE_TEXT = 2
+    private const val HEADER_SIZE = 8 + 1
+    private const val OVERHEAD = Ids.SIZE + Crypto.NONCE_SIZE + HEADER_SIZE + Crypto.TAG_SIZE
+    const val MAX_PACKET_SIZE = OVERHEAD + MAX_TEXT_BYTES
 
-    fun encode(deviceId: UUID, key: ByteArray, counter: Long, keyCode: Int, action: Int = PRESS): ByteArray {
+    sealed class Decoded(val counter: Long) {
+        class Key(counter: Long, val keyCode: Int, val action: Int) : Decoded(counter)
+        class Text(counter: Long, val text: String) : Decoded(counter)
+    }
+
+    fun key(deviceId: UUID, key: ByteArray, counter: Long, keyCode: Int, action: Int = PRESS): ByteArray =
+        encode(deviceId, key, counter, TYPE_KEY, ByteBuffer.allocate(3).putShort(keyCode.toShort()).put(action.toByte()).array())
+
+    fun text(deviceId: UUID, key: ByteArray, counter: Long, text: String): ByteArray {
+        val bytes = text.toByteArray()
+        require(bytes.size <= MAX_TEXT_BYTES) { "text too long" }
+        return encode(deviceId, key, counter, TYPE_TEXT, bytes)
+    }
+
+    private fun encode(deviceId: UUID, key: ByteArray, counter: Long, type: Int, payload: ByteArray): ByteArray {
         val id = Ids.toBytes(deviceId)
-        val plain = ByteBuffer.allocate(PLAIN_SIZE).putLong(counter).putShort(keyCode.toShort()).put(action.toByte()).array()
+        val plain = ByteBuffer.allocate(HEADER_SIZE + payload.size).putLong(counter).put(type.toByte()).put(payload).array()
         return id + Crypto.seal(key, id, plain)
     }
 
-    fun deviceId(packet: ByteArray): UUID? = if (packet.size == PACKET_SIZE) Ids.fromBytes(packet) else null
+    fun deviceId(packet: ByteArray): UUID? = if (packet.size in OVERHEAD..MAX_PACKET_SIZE) Ids.fromBytes(packet) else null
 
     fun decode(key: ByteArray, packet: ByteArray): Decoded? {
-        if (packet.size != PACKET_SIZE) return null
+        if (deviceId(packet) == null) return null
         val plain = Crypto.open(key, packet.copyOf(Ids.SIZE), packet, Ids.SIZE) ?: return null
         val buf = ByteBuffer.wrap(plain)
-        return Decoded(buf.long, buf.short.toInt() and 0xffff, buf.get().toInt())
+        val counter = buf.long
+        return when (buf.get().toInt()) {
+            TYPE_KEY -> if (buf.remaining() == 3) Decoded.Key(counter, buf.short.toInt() and 0xffff, buf.get().toInt()) else null
+            TYPE_TEXT -> Decoded.Text(counter, String(plain, HEADER_SIZE, plain.size - HEADER_SIZE))
+            else -> null
+        }
     }
 }

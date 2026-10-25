@@ -50,9 +50,22 @@ Um app comum não injeta teclas em outros apps. O firmware desta box é assinado
 4. O celular prova que tem o PIN com um HMAC. A TV confirma com outro HMAC e salva UUID + chave.
 5. São até 3 tentativas de PIN por sessão.
 
-**Comando** (55 bytes por pacote): `UUID || nonce || AES-128-GCM(contador, keycode, ação) || tag`.
+**Comando**: `UUID || nonce || AES-128-GCM(contador, tipo, dados) || tag`.
 - O UUID entra como AAD.
+- Há dois tipos:
+  - **tecla**: keycode + ação, 56 bytes no total;
+  - **texto**: UTF-8, até 1000 bytes.
 - A TV descarta pacotes de UUID desconhecido, que não passam na autenticação ou com contador que não seja maior que o último recebido (proteção contra replay).
+- O celular envia cada pacote 2 vezes, porque o Wi-Fi perde alguns pacotes UDP. A cópia tem o mesmo contador e a TV ignora.
+
+**Volume**: volume +/− e mudo são aplicados direto no `AudioManager` (stream de mídia, com a barra na tela), sem simular a tecla.
+
+**Texto**: o botão de teclado no app do celular abre um campo; ao enviar, a TV procura o campo de texto com foco.
+- Se ele for alcançável por acessibilidade (campos nativos do Android), o texto é inserido no cursor.
+- Se o teclado da TV estiver aberto, mas o campo não for alcançável (páginas web no Chrome), o texto vai para a área de transferência e a TV aperta Ctrl+V.
+- Sem campo focado, o texto é descartado.
+- Apps com teclado próprio desenhado na tela (Netflix, YouTube) não têm campo Android e não recebem o texto.
+- O serviço de acessibilidade "ATV Remote: texto" é ativado pelo próprio app (roda como sistema).
 
 ## Pareamento antigo no boot (desligado)
 

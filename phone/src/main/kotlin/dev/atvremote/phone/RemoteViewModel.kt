@@ -98,6 +98,8 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
 
     fun press(keyCode: Int) = sender.send(keyCode)
 
+    fun sendText(text: String) = sender.sendText(text)
+
     /** The TV's IP may have changed (DHCP); look for it again by name. */
     private fun refreshHost() = viewModelScope.launch {
         val tv = store.tv ?: return@launch

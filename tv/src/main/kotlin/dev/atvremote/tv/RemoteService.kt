@@ -33,7 +33,7 @@ import kotlin.concurrent.thread
 /** Listens for discovery, pairing and commands from paired phones. Started on boot. */
 class RemoteService : Service() {
     private lateinit var store: PairingStore
-    private val injector = KeyInjector()
+    private lateinit var injector: KeyInjector
     private val pairing = AtomicBoolean(false)
     private val sockets = mutableListOf<Closeable>()
     @Volatile private var running = false
@@ -41,6 +41,8 @@ class RemoteService : Service() {
     override fun onCreate() {
         super.onCreate()
         store = (application as App).store
+        injector = KeyInjector(this)
+        TextInputService.enable(this)
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel(CH_SERVICE, "Serviço", NotificationManager.IMPORTANCE_MIN))
         nm.createNotificationChannel(NotificationChannel(CH_PAIR, "Pareamento", NotificationManager.IMPORTANCE_HIGH))
@@ -156,7 +158,7 @@ class RemoteService : Service() {
 
     private fun commandLoop() {
         track(DatagramSocket(Ports.COMMAND)).use {
-            val buf = ByteArray(256)
+            val buf = ByteArray(Command.MAX_PACKET_SIZE)
             while (running) {
                 val p = DatagramPacket(buf, buf.size)
                 it.receive(p)
@@ -164,7 +166,17 @@ class RemoteService : Service() {
                 val phone = Command.deviceId(packet)?.let(store::get) ?: continue
                 val cmd = Command.decode(phone.key, packet) ?: continue
                 if (!store.acceptCounter(phone.id, cmd.counter)) continue
-                injector.inject(cmd.keyCode, cmd.action)
+                when (cmd) {
+                    is Command.Decoded.Key -> {
+                        Log.i(TAG, "key ${cmd.keyCode} action ${cmd.action} from ${phone.name}")
+                        injector.inject(cmd.keyCode, cmd.action)
+                    }
+                    is Command.Decoded.Text -> {
+                        val result = TextInputService.insert(cmd.text)
+                        if (result == TextInputService.Result.NEEDS_PASTE) injector.paste(cmd.text)
+                        Log.i(TAG, "text (${cmd.text.length} chars) from ${phone.name}: $result")
+                    }
+                }
             }
         }
     }
