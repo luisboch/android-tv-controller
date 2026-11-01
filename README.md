@@ -75,3 +75,7 @@ O Automate foi desativado. Para reverter:
 ```bash
 adb -s 10.0.3.118:5555 shell pm enable com.llamalab.automate
 ```
+
+## Licença
+
+[0BSD](LICENSE): uso livre, sem garantia. As chaves de teste do AOSP em `keys/` e o Gradle wrapper são Apache-2.0 (ver [NOTICE](NOTICE)).

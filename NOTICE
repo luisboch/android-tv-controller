@@ -1,0 +1,12 @@
+This project's own code is licensed under 0BSD (see LICENSE).
+
+Third-party material included in this repository:
+
+- keys/platform.pk8, keys/platform.x509.pem, keys/platform.p12
+  The public AOSP test platform key, from the Android Open Source Project
+  (build/target/product/security). Copyright (C) The Android Open Source Project.
+  Licensed under the Apache License, Version 2.0:
+  https://www.apache.org/licenses/LICENSE-2.0
+
+- gradle/wrapper/gradle-wrapper.jar, gradlew, gradlew.bat
+  Gradle wrapper, Copyright (C) Gradle, Inc. Licensed under the Apache License, Version 2.0.
