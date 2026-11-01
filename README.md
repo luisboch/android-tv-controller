@@ -21,9 +21,9 @@ APKs gerados:
 ## Instalar na box
 
 ```bash
-adb connect 10.0.3.118:5555
-adb -s 10.0.3.118:5555 install -r tv/build/outputs/apk/release/tv-release.apk
-adb -s 10.0.3.118:5555 shell am start -n dev.atvremote.tv/.MainActivity
+adb connect 192.168.1.50:5555
+adb -s 192.168.1.50:5555 install -r tv/build/outputs/apk/release/tv-release.apk
+adb -s 192.168.1.50:5555 shell am start -n dev.atvremote.tv/.MainActivity
 ```
 
 Abrir o app uma vez depois de instalar tira ele do estado "parado". A partir daí ele sobe sozinho a cada boot.
@@ -73,7 +73,7 @@ O fluxo do Automate (`/sdcard/Download/start-app-boot.flo`) abria `com.hcy.myapp
 O Automate foi desativado. Para reverter:
 
 ```bash
-adb -s 10.0.3.118:5555 shell pm enable com.llamalab.automate
+adb -s 192.168.1.50:5555 shell pm enable com.llamalab.automate
 ```
 
 ## Licença
